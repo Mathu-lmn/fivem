@@ -1,3 +1,5 @@
+local gameBuilds = require("premake5_builds")
+
 -- to work around slow init times due to packagesrv.com being down
 premake.downloadModule = function()
 	return false
@@ -150,6 +152,7 @@ workspace "CitizenMP"
 		defines { "GTEST_HAS_PTHREAD=0", "BOOST_ALL_NO_LIB" }
  		defines { "BOOST_NULLPTR=nullptr" }
 		defines { "_HAS_AUTO_PTR_ETC" } -- until boost gets fixed
+		defines { "_PPLTASK_ASYNC_LOGGING=0"}
 
 	filter {}
 
@@ -224,6 +227,24 @@ workspace "CitizenMP"
 		defines "NDEBUG"
 		optimize "Speed"
 
+
+	local buildsDef = "GAME_BUILDS="
+	local builds = gameBuilds[_OPTIONS["game"]]
+
+	if builds ~= nil then
+		local buildsOrdered = {}
+
+		for n in pairs(builds) do table.insert(buildsOrdered, n) end
+		table.sort(buildsOrdered)
+
+		for _, build in ipairs(buildsOrdered) do
+			buildsDef = buildsDef .. "(" .. string.sub(build, string.len("game_") + 1) .. ")"
+		end
+
+		filter 'language:C or language:C++'
+			defines(buildsDef)
+	end
+
 	filter {}
 
 	if _OPTIONS["game"] == "ny" then
@@ -246,9 +267,13 @@ workspace "CitizenMP"
 			architecture 'x64'
 	elseif _OPTIONS["game"] == "launcher" then
 		defines "IS_LAUNCHER"
-
+		
 		filter 'language:C or language:C++ or language:C#'
 			architecture 'x64'
+			defines(buildsDef .. "(0)")
+	else
+		filter 'language:C or language:C++'
+			defines(buildsDef .. "(0)")
 	end
 
 	filter { "system:windows", 'language:C or language:C++' }
@@ -274,6 +299,7 @@ workspace "CitizenMP"
 		include 'client/diag'
 	else
 		include 'server/launcher'
+		include 'tests'
 	end
 	
 	if os.istarget('windows') then
@@ -529,6 +555,7 @@ if _OPTIONS['game'] ~= 'launcher' then
 		else
 			if _OPTIONS['game'] == 'five' then
 				files { 'client/clrcore/External/*.cs' }
+				files { 'client/clrcore-v2/Game/Shared/*.cs' }
 			end
 			
 			defines { 'USE_HYPERDRIVE' }

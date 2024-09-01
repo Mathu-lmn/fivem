@@ -5,6 +5,8 @@
 #include "MonoDomainScope.h"
 #include "MonoFreeable.h"
 
+#include "fxScriptBuffer.h"
+
 #include <msgpack.hpp>
 #include <Profiler.h>
 
@@ -262,11 +264,13 @@ int MonoScriptRuntime::HandlesFile(char* filename, IScriptHostWithResourceData* 
 	}
 
 	// last supported date for this pilot of mono_rt2, in UTC
-	constexpr int maxYear = 2024, maxMonth = 3, maxDay = 31;
+	constexpr int maxYear = 2024, maxMonth = 12, maxDay = 31;
 
 	// Allowed values for mono_rt2
 	constexpr std::string_view allowedValues[] = {
 		// put latest on top, right here ↓
+	    "Prerelease expiring 2024-12-31. See https://aka.cfx.re/mono-rt2-preview for info."sv,
+		"Prerelease expiring 2024-06-30. See https://aka.cfx.re/mono-rt2-preview for info."sv,
 		"Prerelease expiring 2024-03-31. See https://aka.cfx.re/mono-rt2-preview for info."sv,
 		"Prerelease expiring 2023-12-31. See https://aka.cfx.re/mono-rt2-preview for info."sv,
 		"Prerelease expiring 2023-08-31. See https://aka.cfx.re/mono-rt2-preview for info."sv,
@@ -335,17 +339,26 @@ result_t MonoScriptRuntime::LoadFile(char* scriptFile)
 	return ReturnOrError(exc);
 }
 
-result_t MonoScriptRuntime::CallRef(int32_t refIndex, char* argsSerialized, uint32_t argsSize, char** retvalSerialized, uint32_t* retvalSize)
+result_t MonoScriptRuntime::CallRef(int32_t refIndex, char* argsSerialized, uint32_t argsSize, IScriptBuffer** buffer)
 {
-	*retvalSerialized = nullptr;
-	*retvalSize = 0;
-
 	fx::PushEnvironment env(this);
 	MonoComponentHost::EnsureThreadAttached();
 	MonoDomainScope scope(m_appDomain);
 
+	MonoArray* retval = nullptr;
 	MonoException* exc = nullptr;
-	m_callRef(refIndex, argsSerialized, argsSize, retvalSerialized, retvalSize, GetCurrentSchedulerTime(), IsProfiling(), &exc);
+	m_callRef(refIndex, argsSerialized, argsSize, &retval, GetCurrentSchedulerTime(), IsProfiling(), &exc);
+
+	*buffer = nullptr;
+
+	if (retval)
+	{
+		char* retvalStart = mono_array_addr(retval, char, 0);
+		uintptr_t retvalLength = mono_array_length(retval);
+
+		auto rvb = fx::MemoryScriptBuffer::Make(retvalStart, retvalLength);
+		rvb.CopyTo(buffer);
+	}
 
 	return ReturnOrError(exc);
 }
@@ -384,6 +397,27 @@ MonoArray* MonoScriptRuntime::CanonicalizeRef(int referenceId) const
 	memcpy(mono_array_addr_with_size(arr, 1, 0), str, size);
 
 	fwFree(str);
+
+	return arr;
+}
+
+MonoArray* MonoScriptRuntime::InvokeFunctionReference(MonoString* referenceId, MonoArray* argsSerialized) const
+{
+	std::string referenceString = UTF8CString(referenceId);
+
+	char* argsStart = mono_array_addr(argsSerialized, char, 0);
+	uintptr_t argsLength = mono_array_length(argsSerialized);
+
+	fx::OMPtr<IScriptBuffer> retval;
+	result_t hr = m_scriptHost->InvokeFunctionReference(const_cast<char*>(referenceString.c_str()), argsStart, argsLength, retval.GetAddressOf());
+	size_t size = (retval.GetRef()) ? retval->GetLength() : 0;
+
+	MonoArray* arr = mono_array_new(m_appDomain, mono_get_byte_class(), size);
+
+	if (size)
+	{
+		memcpy(mono_array_addr_with_size(arr, 1, 0), retval->GetBytes(), size);
+	}
 
 	return arr;
 }

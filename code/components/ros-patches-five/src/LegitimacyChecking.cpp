@@ -898,6 +898,17 @@ bool VerifyRetailOwnershipInternal(int pass)
 		g_entitlementSource = r.text;
 		return true;
 	}
+
+	if (r.status_code == 403)
+	{
+		FatalError(
+			"Unable to verify ownership of Red Dead Redemption 2/Red Dead Online\n"
+			"- Try launching the game through Steam/Epic Games Launcher first.\n"
+			"- Wait until the game is fully running and close it.\n"
+			"- Try launching RedM again."
+		);
+		return false;
+	}
 #endif
 
 	return false;
@@ -946,7 +957,8 @@ namespace ros
 
 void LoadOwnershipEarly()
 {
-	tokenVar = new ConVar<std::string>("cl_ownershipTicket", ConVar_None, "");
+	// ConVar_ScriptRestricted because ownership ticket is sensitive information. Should never be exposed to 3rd party
+	tokenVar = new ConVar<std::string>("cl_ownershipTicket", ConVar_ScriptRestricted, "");
 
 	if (!tokenVar->GetValue().empty())
 	{

@@ -1,5 +1,6 @@
 #include "StdInc.h"
 
+#include <array>
 #include <mutex>
 
 #include <d3d11_1.h>
@@ -16,7 +17,6 @@
 #include <Error.h>
 
 #include <CrossBuildRuntime.h>
-#include <LaunchMode.h>
 #include <CL2LaunchMode.h>
 
 #include <CoreConsole.h>
@@ -168,6 +168,7 @@ static void InvokeRender()
 
 static IDXGISwapChain1* g_swapChain1;
 static DWORD g_swapChainFlags;
+static std::array<void*, 2> g_swapChainFlagLocations;
 static ID3D11DeviceContext* g_dc;
 
 static bool g_allowTearing;
@@ -698,10 +699,8 @@ static HRESULT CreateD3D11DeviceWrapOrig(_In_opt_ IDXGIAdapter* pAdapter, D3D_DR
 	}
 
 	// patch stuff here as only now do we know swapchain flags
-	auto pattern = hook::pattern("C7 44 24 28 02 00 00 00 89 44 24 20 41").count(2);
-
-	hook::put<uint32_t>(pattern.get(0).get<void>(4), g_swapChainFlags | 2);
-	hook::put<uint32_t>(pattern.get(1).get<void>(4), g_swapChainFlags | 2);
+	hook::put<uint32_t>(g_swapChainFlagLocations[0], g_swapChainFlags | 2);
+	hook::put<uint32_t>(g_swapChainFlagLocations[1], g_swapChainFlags | 2);
 
 	// we assume all users will stop using the object by the time it is dereferenced
 	if (!initState->isReverseGame)
@@ -1749,7 +1748,7 @@ static HWND WINAPI HookCreateWindowExW(_In_ DWORD dwExStyle, _In_opt_ LPCWSTR lp
 	static HostSharedData<CfxState> initState("CfxInitState");
 	HWND w;
 
-	auto wndName = (CfxIsSinglePlayer()) ? L"Grand Theft Auto V (FiveM SP)" : L"FiveM® by Cfx.re";
+	const auto wndName = L"FiveM® by Cfx.re";
 
 	if (initState->isReverseGame)
 	{
@@ -2000,6 +1999,12 @@ static HookFunction hookFunction([] ()
 		g_dxgiSwapChain = hook::get_address<IDXGISwapChain**>(fnStart + 0x127);
 
 		MH_CreateHook(fnStart, WrapVideoModeChange, (void**)&g_origVideoModeChange);	
+	}
+
+	{
+		auto pattern = hook::pattern("C7 44 24 28 02 00 00 00 89 44 24 20 41").count(2);
+		g_swapChainFlagLocations[0] = pattern.get(0).get<void>(4);
+		g_swapChainFlagLocations[1] = pattern.get(1).get<void>(4);
 	}
 
 	g_resetVideoMode = hook::get_pattern<std::remove_pointer_t<decltype(g_resetVideoMode)>>("8B 44 24 50 4C 8B 17 44 8B 4E 04 44 8B 06", -0x61);
