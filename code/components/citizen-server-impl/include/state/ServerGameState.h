@@ -1187,6 +1187,7 @@ struct GameStateClientData
 {
 	rl::MessageBuffer ackBuffer{ 16384 };
 	std::unordered_set<int> objectIds;
+	std::unordered_set<int> reservedObjectIds;
 
 	std::mutex selfMutex;
 
@@ -1260,9 +1261,9 @@ public:
 
 	void HandleClientDrop(const fx::ClientSharedPtr& client, uint16_t netId, uint32_t slotId);
 
-	void HandleArrayUpdate(const fx::ClientSharedPtr& client, net::Buffer& buffer);
+	void HandleArrayUpdate(const fx::ClientSharedPtr& client, net::packet::ClientArrayUpdate& buffer);
 
-	void SendObjectIds(const fx::ClientSharedPtr& client, int numIds);
+	void GetFreeObjectIds(const fx::ClientSharedPtr& client, uint8_t numIds, std::vector<uint16_t>& freeIds);
 
 	void ReassignEntity(uint32_t entityHandle, const fx::ClientSharedPtr& targetClient, std::unique_lock<std::shared_mutex>&& lock = {});
 
@@ -1417,7 +1418,7 @@ public:
 	{
 		virtual ~ArrayHandlerBase() = default;
 
-		virtual bool ReadUpdate(const fx::ClientSharedPtr& client, net::Buffer& buffer) = 0;
+		virtual bool ReadUpdate(const fx::ClientSharedPtr& client, net::packet::ClientArrayUpdate& buffer) = 0;
 
 		virtual void WriteUpdates(const fx::ClientSharedPtr& client) = 0;
 
